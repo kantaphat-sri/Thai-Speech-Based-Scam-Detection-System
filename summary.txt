@@ -1,0 +1,40 @@
+Thai Scam Detector - Project Summary
+=====================================
+[ ENGLISH ]
+
+The Thai Scam Detector is a Node.js-based web application designed to analyze text and audio for potential scam patterns. The project is split into three main components:
+
+1. Frontend Interface (thai_scam_detector.html)
+A web-based interface that captures user input via text, microphone, or audio file uploads. It communicates with the backend asynchronously to fetch results and update the UI with color-coded risk levels (Safe, Warning, Scam).
+
+2. Orchestration & Backend (server.js, worker_manager.js)
+The Express server routes API requests and caches results. To prevent UI-blocking, intense calculations are delegated to a Round-Robin worker pool via `worker_manager.js`, which spawns isolated CPU threads (`worker.js`).
+
+3. The NLP & DSP Pipeline (pipeline folder)
+The core of the application analyzes data in multiple sequential steps:
+- Preprocessor: Splits continuous Thai text into individual tokens using a sliding window.
+- Extractor: Matches tokens against a dictionary of scam keywords (OTP, money, urgency, authority).
+- Tone Analyzer: Uses Digital Signal Processing (DSP) on raw audio to measure speech rate, pitch, volume, and stress.
+- Transcriber: A stub/service connector for converting voice to text via an ASR model.
+- Scorer & Classifier: Combines keyword scores and acoustic risks to determine the final verdict.
+
+
+=====================================
+[ ภาษาไทย ]
+
+ภาพรวมโปรเจกต์ Thai Scam Detector
+โปรเจกต์นี้คือแอปพลิเคชัน Node.js ที่ใช้สำหรับตรวจจับและวิเคราะห์ข้อความหรือเสียงพูดที่เข้าข่ายการหลอกลวง (Scam) โดยแบ่งการทำงานหลักเป็น 3 ส่วนดังนี้:
+
+1. ส่วนผู้ใช้งาน (thai_scam_detector.html)
+หน้าเว็บไซต์สำหรับรับข้อมูลจากผู้ใช้ (พิมพ์ข้อความ, อัดเสียง, อัปโหลดไฟล์เสียง) ส่งข้อมูลไปยังหลังบ้านผ่าน API และแสดงผลประเมินความเสี่ยงพร้อมให้สีระดับความอันตราย (ปลอดภัย, แจ้งเตือน, อันตราย) 
+
+2. ส่วนเซิร์ฟเวอร์และการจัดการคิว (server.js, worker_manager.js)
+ระบบหลังบ้านใช้ Express ในการรับส่งเควสและทำแคช (Cache) เพื่อเพิ่มความเร็ว จากนั้นใช้ระบบ Worker Pool (ตัวจัดการคิว) เพื่อกระจายงานประมวลผลที่หนักหน่วงไปยังเธรด (Thread) ย่อย เพื่อไม่ให้ระบบหลักทำงานติดขัด
+
+3. ระบบประมวลผล NLP และ DSP (หมวดหมู่ pipeline)
+เป็นหัวใจในการสแกนข้อมูล โดยแบ่งเป็นหน้าย่อยดังนี้:
+- Preprocessor: ตัดและแบ่งคำภาษาไทย
+- Extractor: ดึงคำมาตรวจเทียบกับฐานข้อมูลคำเสี่ยง (รหัส OTP, การโอนเงิน, การเร่งรัด, การอ้างตัวเป็นตำรวจ/เจ้าหน้าที่)
+- Tone Analyzer: วิเคราะห์ฟิสิกส์คลื่นเสียง (DSP) จับความผิดปกติทางน้ำเสียง เช่น พูดเร็วเกินไป, เสียงดัง, เสียงสั่นเครียด, พูดไม่เว้นจังหวะ
+- Transcriber: ระบบสำหรับเชื่อมต่อ Model การแปลงเสียงเป็นข้อความ
+- Scorer & Classifier: ชั่งน้ำหนักคะแนนทั้งจากฝั่งข้อความคำศัพท์และฝั่งการวิเคราะห์น้ำเสียง เพื่อผสมและประเมินระดับความเสี่ยงในท้ายที่สุด

@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thai Speech Scam Detector</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+  :root {
+    --bg:#f8f9fa;--surface:#ffffff;--surface2:#f1f3f5;
+    --border:rgba(0,0,0,0.08);--border-bright:rgba(0,0,0,0.12);
+    --text:#212529;--text-muted:#495057;--text-dim:#adb5bd;
+    --red:#c82333;--red-bg:rgba(200,35,51,0.08);--red-border:rgba(200,35,51,0.2);
+    --green:#1e7e34;--green-bg:rgba(30,126,52,0.08);--green-border:rgba(30,126,52,0.2);
+    --blue:#004085;--blue-bg:rgba(0,64,133,0.08);--blue-border:rgba(0,64,133,0.2);
+    --amber:#856404;--amber-bg:rgba(133,100,4,0.08);
+    --rtp-maroon:#800000;--rtp-gold:#D4AF37;--rtp-navy:#000033;
+    --accent:var(--rtp-maroon);--accent-glow:rgba(128,0,0,0.1);
+    --font:'IBM Plex Sans Thai',sans-serif;--mono:'IBM Plex Mono',monospace;
+    --r:10px;--r-sm:6px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;padding:2rem 1rem;line-height:1.6;}
+  .app{max-width:880px;margin:0 auto;}
+  .header{display:flex;align-items:center;gap:18px;margin-bottom:2rem;padding:1.5rem;background:var(--rtp-maroon);color:white;border-radius:var(--r);border-bottom:4px solid var(--rtp-gold);box-shadow:0 4px 12px rgba(0,0,0,0.15);}
+  .header-icon{width:64px;height:64px;border-radius:50%;background:white;border:2px solid var(--rtp-gold);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;box-shadow:0 0 15px rgba(212,175,55,0.3);}
+  .header-icon img{width:100%;height:100%;object-fit:cover;}
+  .header h1{font-size:1.4rem;font-weight:700;letter-spacing:-0.01em;color:white;text-shadow:0 1px 2px rgba(0,0,0,0.3);}
+  .header p{font-size:0.85rem;color:rgba(255,255,255,0.8);margin-top:2px;}
+  .badge{margin-left:auto;font-size:0.75rem;font-family:var(--mono);color:var(--rtp-maroon);background:white;border:1px solid var(--rtp-gold);padding:4px 12px;border-radius:20px;white-space:nowrap;font-weight:600;}
+  .pipeline{display:flex;align-items:center;gap:0;margin-bottom:1.5rem;overflow-x:auto;padding-bottom:4px;}
+  .pipe-step{display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:var(--r-sm);font-size:0.72rem;font-weight:500;white-space:nowrap;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);transition:all 0.3s;}
+  .pipe-step.active{background:var(--blue-bg);border-color:var(--blue-border);color:var(--blue);}
+  .pipe-step.done{background:rgba(99,102,241,0.08);border-color:rgba(99,102,241,0.25);color:var(--accent);}
+  .pipe-step.result-scam{background:var(--red-bg);border-color:var(--red-border);color:var(--red);}
+  .pipe-step.result-ok{background:var(--green-bg);border-color:var(--green-border);color:var(--green);}
+  .pipe-step.result-warning{background:var(--amber-bg);border-color:rgba(245,158,11,0.35);color:var(--amber);}
+  .pipe-arrow{color:var(--text-dim);font-size:1rem;padding:0 4px;flex-shrink:0;}
+  .pipe-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;}
+  .input-tabs{display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap;}
+  .tab-btn{padding:7px 16px;border-radius:var(--r-sm);font-size:0.78rem;font-family:var(--font);border:1px solid var(--border);background:var(--surface2);color:var(--text-muted);cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px;}
+  .tab-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .tab-btn.active{background:var(--accent-glow);border-color:rgba(99,102,241,0.5);color:var(--accent);font-weight:500;}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;}
+  @media(max-width:600px){.grid{grid-template-columns:1fr;}}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.5rem;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.03);}
+  .card-label{font-size:0.75rem;font-family:var(--font);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--rtp-maroon);margin-bottom:1rem;display:flex;align-items:center;gap:8px;}
+  .card-label::before{content:'';display:block;width:4px;height:14px;border-radius:2px;background:var(--rtp-gold);flex-shrink:0;}
+  textarea{width:100%;background:transparent;border:none;outline:none;resize:none;font-family:var(--font);font-size:0.95rem;color:var(--text);line-height:1.7;min-height:100px;}
+  textarea::placeholder{color:var(--text-dim);}
+  .examples{margin-top:0.75rem;display:flex;flex-wrap:wrap;gap:6px;}
+  .example-btn{font-size:0.72rem;font-family:var(--font);padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text-muted);transition:all 0.2s;}
+  .example-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .example-btn.scam-ex{border-color:var(--red-border);color:var(--red);background:var(--red-bg);}
+  .example-btn.ok-ex{border-color:var(--green-border);color:var(--green);background:var(--green-bg);}
+  .analyze-btn{width:100%;margin-top:1rem;padding:0.875rem;background:var(--accent);border:none;border-radius:var(--r-sm);color:white;font-family:var(--font);font-size:0.95rem;font-weight:600;cursor:pointer;transition:all 0.2s;}
+  .analyze-btn:hover{background:#818cf8;}
+  .analyze-btn:active{transform:scale(0.98);}
+  .analyze-btn:disabled{background:var(--surface2);color:var(--text-dim);cursor:not-allowed;transform:none;}
+  /* Mic */
+  .mic-area{display:flex;flex-direction:column;align-items:center;gap:1rem;padding:1.5rem 0 0.5rem;}
+  .mic-btn{width:72px;height:72px;border-radius:50%;border:2px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;font-size:1.8rem;}
+  .mic-btn:hover{border-color:var(--accent);background:var(--accent-glow);}
+  .mic-btn.recording{border-color:var(--red);background:var(--red-bg);animation:pulse 1s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.4)}50%{box-shadow:0 0 0 12px rgba(239,68,68,0)}}
+  .mic-status{font-size:0.82rem;color:var(--text-muted);text-align:center;min-height:20px;}
+  .mic-status.active{color:var(--red);}
+  .mic-live-text{width:100%;min-height:60px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;font-size:0.88rem;color:var(--text);font-family:var(--font);line-height:1.6;}
+  .mic-note{font-size:0.72rem;color:var(--text-dim);text-align:center;}
+  /* Upload */
+  .upload-zone{border:2px dashed var(--border);border-radius:var(--r);padding:2rem 1rem;text-align:center;cursor:pointer;transition:all 0.2s;position:relative;}
+  .upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:var(--accent-glow);}
+  .upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;}
+  .upload-icon{font-size:2rem;margin-bottom:0.5rem;}
+  .upload-title{font-size:0.9rem;font-weight:500;margin-bottom:4px;}
+  .upload-sub{font-size:0.75rem;color:var(--text-muted);}
+  .file-info{margin-top:1rem;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);font-size:0.8rem;display:none;align-items:center;gap:10px;}
+  .file-info.show{display:flex;}
+  .file-name{font-family:var(--mono);color:var(--accent);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .file-size{color:var(--text-dim);font-size:0.72rem;white-space:nowrap;}
+  .audio-player-wrap{margin-top:10px;display:none;}
+  .audio-player-wrap.show{display:block;}
+  audio{width:100%;height:36px;accent-color:var(--accent);}
+  .stt-note{margin-top:1rem;padding:10px 14px;background:var(--amber-bg);border:1px solid rgba(245,158,11,0.25);border-radius:var(--r-sm);font-size:0.78rem;color:#fbbf24;line-height:1.6;}
+  /* Analysis widgets */
+  .tokens{display:flex;flex-wrap:wrap;gap:6px;min-height:40px;}
+  .token{font-size:0.78rem;font-family:var(--mono);padding:3px 8px;border-radius:var(--r-sm);background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);}
+  .token.hit-otp{background:rgba(239,68,68,0.18);border-color:var(--red-border);color:var(--red);font-weight:500;}
+  .token.hit-money{background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.35);color:var(--amber);font-weight:500;}
+  .token.hit-urgency{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.2);color:#f87171;font-weight:500;}
+  .token.hit-authority{background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.25);color:#fbbf24;font-weight:500;}
+  .feature-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.82rem;}
+  .feature-row:last-child{border-bottom:none;}
+  .feature-name{color:var(--text-muted);}
+  .feature-hits{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:60%;}
+  .feature-tag{font-size:0.68rem;font-family:var(--mono);padding:2px 7px;border-radius:12px;}
+  .ft-otp{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);}
+  .ft-money{background:var(--amber-bg);color:var(--amber);}
+  .ft-urgency{background:rgba(239,68,68,0.08);color:#f87171;}
+  .ft-authority{background:rgba(245,158,11,0.08);color:#fbbf24;}
+  .ft-none{color:var(--text-dim);font-size:0.72rem;}
+  .score-bar-wrap{margin:1.25rem 0 0.75rem;}
+  .score-labels{display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;}
+  .score-track{height:8px;border-radius:4px;background:var(--surface2);overflow:hidden;border:1px solid var(--border);}
+  .score-fill{height:100%;border-radius:4px;transition:width 0.7s cubic-bezier(.4,0,.2,1),background 0.5s;width:0%;}
+  .verdict{border-radius:var(--r);padding:1.25rem;display:flex;align-items:center;gap:14px;transition:all 0.4s;margin-bottom:1rem;border:1px solid var(--border);background:var(--surface);}
+  .verdict.scam{background:var(--red-bg);border-color:var(--red-border);}
+  .verdict.safe{background:var(--green-bg);border-color:var(--green-border);}
+  .verdict.warning{background:var(--amber-bg);border-color:rgba(245,158,11,0.35);}
+  .verdict.warning .verdict-sub{color:var(--amber);}
+  .verdict.warning .verdict-score-badge{background:var(--amber-bg);color:var(--amber);border:1px solid rgba(245,158,11,0.35);}
+  .verdict-icon{font-size:1.8rem;flex-shrink:0;}
+  .verdict-title{font-size:1.1rem;font-weight:600;}
+  .verdict-sub{font-size:0.8rem;color:var(--text-muted);margin-top:2px;}
+  .verdict.scam .verdict-sub{color:#f87171;}
+  .verdict.safe .verdict-sub{color:#86efac;}
+  .verdict-score-badge{margin-left:auto;font-family:var(--mono);font-size:1.1rem;font-weight:600;padding:6px 14px;border-radius:var(--r-sm);flex-shrink:0;}
+  .verdict.scam .verdict-score-badge{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);}
+  .verdict.safe .verdict-score-badge{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);}
+  .metrics-row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:1rem;}
+  @media(max-width:600px){.metrics-row{grid-template-columns:repeat(2,1fr);}}
+  .metric-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;text-align:center;}
+  .metric-val{font-size:1.2rem;font-weight:600;font-family:var(--mono);}
+  .metric-label{font-size:0.68rem;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:0.06em;}
+  .log-entry{display:block;}
+  .csv-table{width:100%;border-collapse:collapse;font-size:0.78rem;}
+  .csv-table th{text-align:left;padding:7px 10px;background:var(--surface2);color:var(--text-dim);font-family:var(--mono);font-weight:400;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border);}
+  .csv-table td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text-muted);vertical-align:top;}
+  .csv-table td:first-child{color:var(--text-dim);font-family:var(--mono);}
+  .lbl-scam{color:var(--red);font-weight:500;}
+  .lbl-normal{color:var(--green);font-weight:500;}
+  .lbl-warning{color:var(--amber);font-weight:500;}
+  .lbl-score{font-family:var(--mono);font-size:0.75rem;}
+  .section-title{font-size:0.7rem;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin:1.5rem 0 0.75rem;display:flex;align-items:center;gap:8px;}
+  .section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+  .export-btn{font-size:0.75rem;padding:5px 12px;border-radius:var(--r-sm);background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);cursor:pointer;font-family:var(--font);transition:all 0.2s;margin-left:auto;display:block;margin-top:8px;}
+  .export-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .empty-state{color:var(--text-dim);font-size:0.82rem;text-align:center;padding:1.5rem;}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.2);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+  .fadein{animation:fadeIn 0.35s ease;}
+  .source-badge{font-size:0.65rem;font-family:var(--mono);padding:2px 7px;border-radius:10px;background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border);}
+  ::-webkit-scrollbar{width:4px;height:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:2px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+<div class="header">
+  <div class="header-icon"><img src="royal_thai_police_scam_shield_1775732183402.png" alt="RTP Shield"></div>
+  <div>
+    <h1>ระบบตรวจจับสายโทรศัพท์หลอกลวง</h1>
+    <p>ศูนย์ต่อต้านอาชญากรรมออนไลน์ (AOC) — สำนักงานตำรวจแห่งชาติ</p>
+  </div>
+  <div class="badge">ความปลอดภัยระดับรัฐบาล</div>
+</div>
+
+<div class="pipeline" id="pipeline">
+  <div class="pipe-step" id="ps-1"><div class="pipe-dot"></div>Audio Input</div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-step" id="ps-2"><div class="pipe-dot"></div>Speech-to-Text</div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-step" id="ps-3"><div class="pipe-dot"></div>Tokenize</div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-step" id="ps-4"><div class="pipe-dot"></div>Feature Extract</div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-step" id="ps-5"><div class="pipe-dot"></div>Classify</div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-step" id="ps-6"><div class="pipe-dot"></div>Result</div>
+</div>
+
+<div class="input-tabs">
+  <button class="tab-btn active" onclick="switchTab('text')" id="tab-text">⌨️ Text Input</button>
+  <button class="tab-btn" onclick="switchTab('mic')" id="tab-mic">🎤 Microphone</button>
+  <button class="tab-btn" onclick="switchTab('file')" id="tab-file">📁 Upload Audio</button>
+</div>
+
+<!-- Tab 1: Text -->
+<div class="tab-panel active" id="panel-text">
+  <div class="grid">
+    <div class="card">
+      <div class="card-label">Step 1–2 — text / STT transcript</div>
+      <textarea id="input-text" placeholder="พิมพ์ข้อความภาษาไทยที่ต้องการวิเคราะห์&#10;(จำลอง Speech-to-Text output)"></textarea>
+      <div class="examples">
+        <span style="font-size:0.7rem;color:var(--text-dim);margin-right:4px;align-self:center">ตัวอย่าง:</span>
+        <button class="example-btn scam-ex" onclick="setEx(0)">OTP</button>
+        <button class="example-btn scam-ex" onclick="setEx(1)">โอนเงิน</button>
+        <button class="example-btn scam-ex" onclick="setEx(2)">ตำรวจ</button>
+        <button class="example-btn scam-ex" onclick="setEx(3)">ธนาคาร</button>
+        <button class="example-btn ok-ex" onclick="setEx(4)">ปกติ 1</button>
+        <button class="example-btn ok-ex" onclick="setEx(5)">ปกติ 2</button>
+      </div>
+      <button class="analyze-btn" id="analyze-btn" onclick="runPipeline(document.getElementById('input-text').value,'text-input')">วิเคราะห์ข้อความ</button>
+    </div>
+    <div class="card">
+      <div class="card-label">Step 3 — tokenization (PyThaiNLP)</div>
+      <div class="tokens" id="tokens"><span class="empty-state">รอข้อความ...</span></div>
+      <div style="margin-top:1rem">
+        <div class="card-label">Step 4 — detected features</div>
+        <div id="features">
+          <div class="feature-row"><span class="feature-name">OTP / รหัส</span><span class="ft-none">—</span></div>
+          <div class="feature-row"><span class="feature-name">โอนเงิน / ธุรกรรม</span><span class="ft-none">—</span></div>
+          <div class="feature-row"><span class="feature-name">ความเร่งด่วน</span><span class="ft-none">—</span></div>
+          <div class="feature-row"><span class="feature-name">อ้างอำนาจ</span><span class="ft-none">—</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 2: Microphone -->
+<div class="tab-panel" id="panel-mic">
+  <div class="card">
+    <div class="card-label">Web Speech API — Chrome / Edge (ภาษาไทย th-TH)</div>
+    <div class="mic-area">
+      <button class="mic-btn" id="mic-btn" onclick="toggleMic()">🎤</button>
+      <div class="mic-status" id="mic-status">กดปุ่มเพื่อเริ่มอัดเสียง</div>
+      <div class="mic-live-text" id="mic-live">รอเสียง...</div>
+      <p class="mic-note">ข้อความจะปรากฏแบบ real-time ขณะพูด — เมื่อหยุดพูดระบบจะวิเคราะห์อัตโนมัติ</p>
+    </div>
+    <div id="mic-unsupported" style="display:none;padding:1rem;text-align:center;color:var(--red);font-size:0.82rem">
+      ⚠️ เบราว์เซอร์นี้ไม่รองรับ Web Speech API — กรุณาใช้ Chrome หรือ Edge
+    </div>
+  </div>
+</div>
+
+<!-- Tab 3: File Upload -->
+<div class="tab-panel" id="panel-file">
+  <div class="card">
+    <div class="card-label">Upload audio file — .wav / .mp3 / .ogg / .m4a</div>
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" accept="audio/*" onchange="handleFile(this)" id="audio-file-input">
+      <div class="upload-icon">🎵</div>
+      <div class="upload-title">ลากไฟล์มาวางหรือคลิกเพื่อเลือกไฟล์</div>
+      <div class="upload-sub">รองรับ .wav, .mp3, .ogg, .m4a</div>
+    </div>
+    <div class="file-info" id="file-info">
+      <span style="font-size:1.2rem">🎧</span>
+      <span class="file-name" id="file-name">—</span>
+      <span class="file-size" id="file-size">—</span>
+    </div>
+    <div class="audio-player-wrap" id="audio-player-wrap">
+      <audio id="audio-player" controls></audio>
+    </div>
+
+    <div style="margin-top:1rem">
+      <div class="card-label">🤖 Automatic Speech-to-Text — ระบบจะแปลงเสียงเป็นข้อความให้อัตโนมัติ</div>
+      <div id="stt-status" style="display:none; padding:10px 14px; background:var(--blue-bg); border:1px solid var(--blue-border); border-radius:var(--r-sm); font-size:0.82rem; color:var(--blue); margin-bottom:8px; align-items:center; gap:8px;">
+        <span class="spinner" style="border-color:rgba(0,64,133,0.2); border-top-color:var(--blue); width:12px; height:12px;"></span>
+        <span id="stt-status-text">กำลังแปลงเสียงเป็นข้อความ...</span>
+      </div>
+      <div id="file-transcript-display" style="min-height:90px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm); padding:12px; font-size:0.88rem; color:var(--text); line-height:1.7; white-space:pre-wrap;">
+        <span style="color:var(--text-dim); font-size:0.82rem;">ผลลัพธ์ Speech-to-Text จะแสดงที่นี่หลังกดปุ่มวิเคราะห์...</span>
+      </div>
+    </div>
+
+    <button class="analyze-btn" style="margin-top:1rem;" id="btn-transcribe" onclick="uploadAndAnalyze()">🎙️ แปลงเสียง → ข้อความ แล้ววิเคราะห์อัตโนมัติ</button>
+  </div>
+</div>
+
+<!-- Tone of Voice Analysis -->
+<div class="card" id="tone-card" style="margin-bottom:1rem; display:none;">
+  <div class="card-label">Tone of Voice Intelligence — vocal risk indicators</div>
+  <div id="tone-results">
+    <!-- Tone signals will be injected here -->
+  </div>
+  <div style="margin-top:1rem; padding:10px; background:rgba(99,102,241,0.05); border-radius:var(--r-sm); font-size:0.75rem; color:var(--text-muted)">
+    <p><strong>💡 ทำไม Tone of Voice ถึงสำคัญ?</strong></p>
+    <p>มิจฉาชีพมักใช้ "ความดันดันด้วยโทนเสียง" (Acoustic Pressure) เช่น การพูดเร็วเพื่อไม่ให้เหยื่อมีเวลาหยุดคิด หรือการใช้ระดับเสียงที่สูง (High Pitch) เพื่อสร้างความรู้สึกเร่งด่วนและเครียด</p>
+  </div>
+</div>
+
+<!-- Verdict -->
+<div class="verdict" id="verdict">
+  <div class="verdict-icon">🔍</div>
+  <div><div class="verdict-title">รอการวิเคราะห์</div><div class="verdict-sub">เลือกวิธีป้อนข้อมูลแล้วเริ่มวิเคราะห์</div></div>
+</div>
+
+<!-- Score bar -->
+<div class="card" style="margin-bottom:1rem">
+  <div class="card-label">Step 5 — keyword scoring</div>
+  <div class="score-bar-wrap">
+    <div class="score-labels"><span>ปลอดภัย (0)</span><span>Scam Score</span><span>อันตราย (100)</span></div>
+    <div class="score-track"><div class="score-fill" id="score-fill"></div></div>
+  </div>
+  <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.5rem">
+    <span style="color:var(--red)">■</span> OTP/รหัส (+35)
+    <span style="color:var(--amber);margin-left:8px">■</span> โอนเงิน (+30)
+    <span style="color:#f87171;margin-left:8px">■</span> ความเร่งด่วน (+20)
+    <span style="color:#fbbf24;margin-left:8px">■</span> อ้างอำนาจ (+15)
+    <span style="float:right;font-family:var(--mono)">≥ 60 SCAM | &gt; 35 WARNING</span>
+  </div>
+</div>
+
+<div class="metrics-row">
+  <div class="metric-card"><div class="metric-val" id="m-analyzed">0</div><div class="metric-label">Analyzed</div></div>
+  <div class="metric-card"><div class="metric-val" style="color:var(--red)" id="m-scam">0</div><div class="metric-label">Scam</div></div>
+  <div class="metric-card"><div class="metric-val" style="color:var(--amber)" id="m-warn">0</div><div class="metric-label">Warning</div></div>
+  <div class="metric-card"><div class="metric-val" style="color:var(--green)" id="m-safe">0</div><div class="metric-label">Safe</div></div>
+  <div class="metric-card"><div class="metric-val" style="color:var(--accent)" id="m-rate">—</div><div class="metric-label">Scam Rate</div></div>
+</div>
+
+<div class="section-title">Analysis History (CSV Preview)</div>
+
+<div class="section-title">Dataset (CSV Preview)</div>
+<div class="card" style="overflow-x:auto;padding:0">
+  <table class="csv-table">
+    <thead><tr><th>id</th><th>transcript</th><th>label</th><th>score</th><th>source</th><th>hits</th></tr></thead>
+    <tbody id="csv-body"><tr><td colspan="6"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr></tbody>
+  </table>
+</div>
+<button class="export-btn" onclick="exportCSV()">⬇ Export CSV</button>
+
+</div>
+<script>
+// ── Configuration ─────────────────────────────────────────────────────────────
+// All NLP processing (tokenisation, feature extraction, classification) is now
+// handled exclusively by the Python backend (server.py).  The browser is a
+// pure UI layer: it sends text/audio to the API and renders the response.
+//
+// Pattern metadata kept client-side ONLY for colour-coding tokens in the UI.
+// No weights, no scoring, no keyword matching in JavaScript.
+const PATTERNS_UI = {
+  otp:       { label: 'OTP / รหัส',          cls: 'ft-otp',       tkCls: 'hit-otp'       },
+  money:     { label: 'โอนเงิน / ธุรกรรม',  cls: 'ft-money',     tkCls: 'hit-money'     },
+  urgency:   { label: 'ความเร่งด่วน',        cls: 'ft-urgency',   tkCls: 'hit-urgency'   },
+  authority: { label: 'อ้างอำนาจ',           cls: 'ft-authority', tkCls: 'hit-authority' },
+};
+
+const EXAMPLES = [
+  "กรุณาบอกรหัส OTP ตอนนี้เพื่อยืนยันบัญชี",
+  "คุณต้องโอนเงิน 50000 บาทภายใน 10 นาทีไม่งั้นบัญชีถูกระงับ",
+  "นี่คือตำรวจไซเบอร์ คุณต้องให้ข้อมูลบัญชีธนาคารด่วนมาก",
+  "ธนาคารกสิกรไทยแจ้งว่าบัญชีของคุณถูกระงับ กรุณายืนยัน PIN ทันที",
+  "วันนี้ไปกินข้าวกันไหม",
+  "สวัสดีครับ คุณสะดวกคุยตอนบ่ายสามได้ไหมครับ"
+];
+
+let dataset = [], cnt = 0, stats = { a: 0, s: 0, w: 0, ok: 0 };
+let recognition = null, isRec = false;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function getApiUrl() {
+  return (document.getElementById('api-url').value || 'http://localhost:5000').trim();
+}
+
+function switchTab(n) {
+  ['text','mic','file','api'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === n);
+    document.getElementById('panel-' + t).classList.toggle('active', t === n);
+  });
+}
+function setEx(i) { document.getElementById('input-text').value = EXAMPLES[i]; switchTab('text'); }
+
+// ── Core: call Python backend ─────────────────────────────────────────────────
+async function callAnalyzeAPI(text, source) {
+  const url = getApiUrl();
+  const r = await fetch(url + '/analyze', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ text, source }),
+    signal:  AbortSignal.timeout(8000),
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();   // { tokens, hits, score, is_scam, label, elapsed_ms, … }
+}
+
+async function runPipeline(text, src) {
+  if (!text.trim()) return;
+  const btn = document.getElementById('analyze-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>กำลังประมวลผล...'; }
+  resetPL();
+  log('INFO', `[${src}] Input: "${text.slice(0, 50)}"…`, 'log-info');
+
+  // Animate pipeline steps while waiting for the API response
+  actPL(1); log('INFO', 'Sending to Python backend…', 'log-info');
+  actPL(2);
+  actPL(3);
+
+  try {
+    const d = await callAnalyzeAPI(text, src);
+
+    actPL(4); renderToksWithHits(d.tokens || [], d.hits || {});
+    actPL(5); renderFeats(d.hits || {});
+    renderScore(d.score);
+
+    if (d.tone) renderTone(d.tone);
+    else document.getElementById('tone-card').style.display = 'none';
+
+    actPL(6);
+    renderVerdict(d.is_scam, d.is_warning, d.score, d.hits || {});
+    document.getElementById('ps-6').className = 'pipe-step ' + (d.is_scam ? 'result-scam' : d.is_warning ? 'result-warning' : 'result-ok');
+    updMetrics(d.is_scam, d.is_warning);
+    addDS(text, d.is_scam, d.is_warning, d.score, d.hits || {}, src);
+  } catch (e) {
+    console.error('Pipeline error:', e);
+    resetPL();
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = 'วิเคราะห์ข้อความ'; }
+  }
+}
+
+// ── Mic ───────────────────────────────────────────────────────────────────────
+function initMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    document.getElementById('mic-unsupported').style.display = 'block';
+    document.getElementById('mic-btn').style.display = 'none';
+    document.getElementById('mic-status').style.display = 'none';
+    return;
+  }
+  recognition = new SR();
+  recognition.lang = 'th-TH';
+  recognition.interimResults = true;
+  recognition.continuous = false;
+  recognition.onstart = () => {
+    isRec = true;
+    document.getElementById('mic-btn').classList.add('recording');
+    document.getElementById('mic-btn').textContent = '⏹️';
+    document.getElementById('mic-status').textContent = 'กำลังฟัง...';
+    document.getElementById('mic-status').classList.add('active');
+    document.getElementById('mic-live').textContent = '';
+  };
+  recognition.onresult = (e) => {
+    let final = '';
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; ++i) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    document.getElementById('mic-live').innerHTML = final + '<i style="color:#adb5bd">' + interim + '</i>';
+    if (final) {
+      document.getElementById('mic-status').textContent = 'รับเสียงได้ — กำลังวิเคราะห์...';
+      document.getElementById('input-text').value = final;
+      setTimeout(() => runPipeline(final, 'microphone'), 400);
+    }
+  };
+  recognition.onerror = (e) => { document.getElementById('mic-status').textContent = 'Error: ' + e.error; resetMicUI(); };
+  recognition.onend = () => resetMicUI();
+}
+function toggleMic() { if (!recognition) { initMic(); if (!recognition) return; } isRec ? recognition.stop() : recognition.start(); }
+function resetMicUI() {
+  isRec = false;
+  const b = document.getElementById('mic-btn');
+  b.classList.remove('recording'); b.textContent = '🎤';
+  document.getElementById('mic-status').textContent = 'กดปุ่มเพื่อเริ่มอัดเสียง';
+  document.getElementById('mic-status').classList.remove('active');
+}
+
+// ── File upload ───────────────────────────────────────────────────────────────
+function handleFile(input) {
+  const f = input.files[0]; if (!f) return;
+  document.getElementById('file-info').classList.add('show');
+  document.getElementById('file-name').textContent = f.name;
+  document.getElementById('file-size').textContent = (f.size / 1024).toFixed(1) + ' KB';
+  document.getElementById('audio-player').src = URL.createObjectURL(f);
+  document.getElementById('audio-player-wrap').classList.add('show');
+}
+const uz = document.getElementById('upload-zone');
+uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('dragover'); });
+uz.addEventListener('dragleave', () => uz.classList.remove('dragover'));
+uz.addEventListener('drop', e => {
+  e.preventDefault(); uz.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f) { const dt = new DataTransfer(); dt.items.add(f); document.getElementById('audio-file-input').files = dt.files; handleFile(document.getElementById('audio-file-input')); }
+});
+
+// ── File Upload: Auto STT + analysis ──────────────────────────────────────────
+async function uploadAndAnalyze() {
+  const fi = document.getElementById('audio-file-input');
+  const file = fi.files ? fi.files[0] : null;
+
+  if (!file) {
+    alert('กรุณาเลือกไฟล์เสียง');
+    return;
+  }
+
+  const btn = document.getElementById('btn-transcribe');
+  const sttStatus = document.getElementById('stt-status');
+  const sttText = document.getElementById('stt-status-text');
+  const transcriptDisplay = document.getElementById('file-transcript-display');
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>กำลังแปลงเสียง...'; }
+
+  // Show STT status
+  sttStatus.style.display = 'flex';
+  sttText.textContent = '⏳ กำลังส่งไฟล์เสียงไปแปลงเป็นข้อความ (Speech-to-Text)...';
+  transcriptDisplay.innerHTML = '<span style="color:var(--text-dim)"><span class="spinner" style="border-color:rgba(0,0,0,0.1);border-top-color:var(--text-dim);width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>กำลังประมวลผล...</span>';
+
+  resetPL();
+  actPL(1);
+
+  try {
+    // Step 1: Send audio to /transcribe to get automatic STT + full analysis
+    const fd = new FormData();
+    fd.append('audio', file);
+
+    const url = getApiUrl();
+    actPL(2); // Speech-to-Text step
+    sttText.textContent = '🎙️ กำลังแปลงเสียงเป็นข้อความด้วย AI...';
+
+    const r = await fetch(url + '/transcribe', {
+      method: 'POST',
+      body: fd,
+      signal: AbortSignal.timeout(60000)  // allow up to 60s for STT
+    });
+    const d = await r.json();
+
+    // Display the auto-generated transcript
+    const transcript = d.transcript || '[ไม่สามารถแปลงเสียงได้]';
+    transcriptDisplay.innerHTML = '';
+    transcriptDisplay.textContent = transcript;
+    sttText.textContent = '✅ แปลงเสียงเป็นข้อความสำเร็จ!';
+    sttStatus.style.background = 'var(--green-bg)';
+    sttStatus.style.borderColor = 'var(--green-border)';
+    sttStatus.style.color = 'var(--green)';
+    sttStatus.querySelector('.spinner').style.display = 'none';
+
+    // Step 2: Render analysis results from /transcribe response
+    if (d.tokens) { actPL(3); actPL(4); renderToksWithHits(d.tokens, d.hits || {}); }
+    if (d.hits) { actPL(5); renderFeats(d.hits); }
+    renderScore(d.score || 0);
+    if (d.tone) renderTone(d.tone);
+    else document.getElementById('tone-card').style.display = 'none';
+
+    actPL(6);
+    renderVerdict(d.is_scam, d.is_warning, d.score, d.hits || {});
+    document.getElementById('ps-6').className = 'pipe-step ' + (d.is_scam ? 'result-scam' : d.is_warning ? 'result-warning' : 'result-ok');
+    updMetrics(d.is_scam, d.is_warning);
+    addDS(transcript, d.is_scam, d.is_warning, d.score, d.hits || {}, 'auto-stt-upload');
+  } catch (e) {
+    console.error('Upload analysis error:', e);
+    sttText.textContent = '❌ เกิดข้อผิดพลาด: ' + e.message;
+    sttStatus.style.background = 'var(--red-bg)';
+    sttStatus.style.borderColor = 'var(--red-border)';
+    sttStatus.style.color = 'var(--red)';
+    sttStatus.querySelector('.spinner').style.display = 'none';
+    transcriptDisplay.innerHTML = '<span style="color:var(--red)">ไม่สามารถแปลงเสียงได้ — กรุณาตรวจสอบว่า server ทำงานอยู่</span>';
+    resetPL();
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '🎙️ แปลงเสียง → ข้อความ แล้ววิเคราะห์อัตโนมัติ'; }
+  }
+}
+
+function cp(id) {
+  navigator.clipboard.writeText(document.getElementById(id).textContent).then(() => {
+    const btn = document.getElementById(id).previousElementSibling; btn.textContent = 'copied!'; setTimeout(() => btn.textContent = 'copy', 2000);
+  });
+}
+
+// ── Render helpers ────────────────────────────────────────────────────────────
+function renderToks(toks) {
+  const el = document.getElementById('tokens'); el.innerHTML = '';
+  for (const t of toks) {
+    const s = document.createElement('span'); s.className = 'token fadein'; s.textContent = t;
+    for (const [k, p] of Object.entries(PATTERNS_UI)) {
+      // Highlight token if the backend flagged its category (we check hits, not keyword list)
+    }
+    el.appendChild(s);
+  }
+}
+
+function renderToksWithHits(toks, hits) {
+  const el = document.getElementById('tokens'); el.innerHTML = '';
+  // Build a flat set of all matched keywords for quick highlight lookup
+  const hitWords = {};
+  for (const [cat, words] of Object.entries(hits)) {
+    for (const w of words) hitWords[w] = cat;
+  }
+  for (const t of toks) {
+    const s = document.createElement('span'); s.className = 'token fadein'; s.textContent = t;
+    const cat = hitWords[t];
+    if (cat && PATTERNS_UI[cat]) {
+      s.classList.add(PATTERNS_UI[cat].tkCls);
+      s.title = `${PATTERNS_UI[cat].label}`;
+    }
+    el.appendChild(s);
+  }
+}
+
+// Override renderToks to use hits-aware version (hits injected via closure in runPipeline)
+// We achieve this by patching renderToks after each API call in the pipeline.
+
+function renderFeats(hits) {
+  const keys = ['otp', 'money', 'urgency', 'authority'];
+  const el = document.getElementById('features'); el.innerHTML = '';
+  for (const k of keys) {
+    const p = PATTERNS_UI[k];
+    const row = document.createElement('div'); row.className = 'feature-row fadein';
+    const nm = document.createElement('span'); nm.className = 'feature-name'; nm.textContent = p.label; row.appendChild(nm);
+    const hd = document.createElement('div'); hd.className = 'feature-hits';
+    if (hits[k] && hits[k].length) {
+      for (const w of hits[k]) {
+        const tg = document.createElement('span'); tg.className = `feature-tag ${p.cls}`; tg.textContent = w; hd.appendChild(tg);
+      }
+    } else {
+      const n = document.createElement('span'); n.className = 'ft-none'; n.textContent = '—'; hd.appendChild(n);
+    }
+    row.appendChild(hd); el.appendChild(row);
+  }
+}
+
+function renderScore(sc) {
+  const f = document.getElementById('score-fill');
+  f.style.width = sc + '%';
+  f.style.background = sc >= 60 ? 'linear-gradient(90deg,#f87171,#ef4444)' : sc > 35 ? 'linear-gradient(90deg,#fbbf24,#f59e0b)' : 'var(--green)';
+}
+
+function renderVerdict(isSc, isWarn, sc, hits) {
+  let cls = isSc ? 'scam' : isWarn ? 'warning' : 'safe';
+  const el = document.getElementById('verdict'); el.className = 'verdict fadein ' + cls;
+  const rsn = (isSc || isWarn)
+    ? Object.entries(hits).map(([k, v]) => `${PATTERNS_UI[k] ? PATTERNS_UI[k].label : k}: ${v.join(', ')}`).join(' | ')
+    : 'ไม่พบรูปแบบการหลอกลวง';
+  let icon = isSc ? '🚨' : isWarn ? '⚠️' : '✅';
+  let title = isSc ? 'SCAM DETECTED — ตรวจพบการหลอกลวง' : isWarn ? 'WARNING — แจ้งเตือนความเสี่ยง' : 'NOT SCAM — ปลอดภัย';
+  el.innerHTML = `<div class="verdict-icon">${icon}</div><div><div class="verdict-title">${title}</div><div class="verdict-sub">${rsn}</div></div><div class="verdict-score-badge">${sc}/100</div>`;
+}
+
+function actPL(s) { for (let i = 1; i <= 6; i++) document.getElementById(`ps-${i}`).className = 'pipe-step' + (i < s ? ' done' : i === s ? ' active' : ''); }
+function resetPL() { for (let i = 1; i <= 6; i++) document.getElementById(`ps-${i}`).className = 'pipe-step'; }
+
+function updMetrics(isSc, isWarn) {
+  stats.a++; if (isSc) stats.s++; else if (isWarn) stats.w++; else stats.ok++;
+  document.getElementById('m-analyzed').textContent = stats.a;
+  document.getElementById('m-scam').textContent = stats.s;
+  if(document.getElementById('m-warn')) document.getElementById('m-warn').textContent = stats.w;
+  document.getElementById('m-safe').textContent = stats.ok;
+  document.getElementById('m-rate').textContent = stats.a ? Math.round(stats.s / stats.a * 100) + '%' : '—';
+}
+
+function addDS(text, isSc, isWarn, sc, hits, src) {
+  cnt++;
+  const hs = Object.entries(hits).map(([k, v]) => `${k}:${v.join(',')}`).join('; ');
+  let labelStr = isSc ? 'scam' : isWarn ? 'warning' : 'normal';
+  dataset.push({ id: cnt, transcript: text, label: labelStr, score: sc, source: src, hits: hs });
+  const tb = document.getElementById('csv-body'); if (cnt === 1) tb.innerHTML = '';
+  const tr = document.createElement('tr'); tr.className = 'fadein';
+  tr.innerHTML = `<td>${cnt}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${text}">${text.slice(0, 32)}${text.length > 32 ? '...' : ''}</td><td><span class="lbl-${labelStr}">${labelStr}</span></td><td><span class="lbl-score">${sc}</span></td><td><span class="source-badge">${src}</span></td><td style="font-size:0.7rem;color:var(--text-dim)">${hs || '—'}</td>`;
+  tb.appendChild(tr);
+}
+
+function renderTone(tone) {
+  const el = document.getElementById('tone-results');
+  const card = document.getElementById('tone-card');
+  if (!tone || !tone.signals) { card.style.display = 'none'; return; }
+  
+  card.style.display = 'block';
+  el.innerHTML = '';
+  
+  const signals = {
+    high_pitch:   { label: 'ระดับเสียงสูง (High Pitch)', desc: 'บ่งบอกถึงความตื่นตระหนกหรือการกดดัน' },
+    fast_speech:  { label: 'พูดเร็วเกินปกติ (Fast Speech)', desc: 'มักใช้ในการเร่งรัดให้เหยื่อไม่มีเวลาคิด' },
+    loud_volume:  { label: 'เสียงดังเกินปกติ (Loud Volume)', desc: 'การข่มขู่หรือใช้อารมณ์เพื่อให้เหยื่อกลัว' },
+    voice_stress: { label: 'เสียงสั่น/เครียด (Jitter)', desc: 'สัญญาณของความไม่ธรรมชาติหรือการแอบอ้าง' },
+    low_silence:  { label: 'พูดไม่หยุด (Relentless)', desc: 'พยายามควบคุมบทสนทนาไม่ให้เหยื่อได้แย้ง' }
+  };
+
+  tone.signals.forEach(s => {
+    const sig = signals[s];
+    if (sig) {
+      const div = document.createElement('div');
+      div.className = 'feature-row fadein';
+      div.innerHTML = `<span class="feature-name">${sig.label}</span><span class="feature-tag ft-urgency" style="background:var(--red-bg); color:var(--red); font-size:0.65rem; padding:2px 8px; border-radius:10px;">${sig.desc}</span>`;
+      el.appendChild(div);
+    }
+  });
+
+  if (tone.signals.length === 0) {
+    el.innerHTML = '<div class="empty-state">น้ำเสียงปกติ ไม่พบสัญญาณความเสี่ยง</div>';
+  }
+}
+
+function getApiUrl() { return 'http://localhost:5000'; }
+
+function log(level, msg, cls) { console.log(`[${level}] ${msg}`); }
+
+function exportCSV() {
+  if (!dataset.length) { alert('ยังไม่มีข้อมูล'); return; }
+  const h = 'id,transcript,label,score,source,hits\n';
+  const rows = dataset.map(d => `${d.id},"${d.transcript.replace(/"/g, '""')}",${d.label},${d.score},${d.source},"${d.hits}"`).join('\n');
+  const b = new Blob([h + rows], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'thai_scam_dataset.csv'; a.click();
+}
+
+
+</script>
+</body>
+</html>
