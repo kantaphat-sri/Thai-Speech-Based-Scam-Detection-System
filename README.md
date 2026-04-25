@@ -40,76 +40,25 @@ Default port: **5000** (set `PORT` env var to override).
 2. **Memory Management**: An LRU (Least Recently Used) cache is implemented in `server.js` to store past results, dramatically reducing latency and memory footprint.
 3. **Inter-Process Communication (IPC)**: A structured message-passing protocol allows the main thread to securely exchange Buffer data and JSON with worker threads without blocking.
 
-## The NLP & DSP Pipeline
+## Detailed File Architecture
 
-The core of the application analyzes data in multiple sequential steps:
-- **Preprocessor**: Splits continuous Thai text into individual tokens using a 3-character sliding window.
-- **Extractor**: Matches tokens against a dictionary of scam keywords (OTP, money, urgency, authority).
-- **Tone Analyzer**: Uses Digital Signal Processing (DSP) on raw audio to measure speech rate, pitch, volume, and stress.
-- **Transcriber**: A stub/service connector for converting voice to text via an ASR model.
-- **Scorer & Classifier**: Combines keyword scores and acoustic risks to determine the final verdict.
+### 1. Root Directory Files
 
-## API Endpoints
+*   **`server.js`**: The main orchestrator. Defines the Express server, API endpoints, manages the LRU cache, and delegates heavy tasks to the Worker Pool.
+*   **`thai_scam_detector.html`**: The frontend UI. Handles user interactions, audio recording, and file uploads.
+*   **`package.json`**: Project metadata and dependencies (`express`, `multer`, `ffmpeg` wrappers, etc.).
+*   **`Thai Scam Detector High-Performance Fraud Prevention.pdf`**: Theoretical documentation on the project's logic and architecture.
 
-| Method | Path         | Description                              |
-|--------|--------------|------------------------------------------|
-| GET    | `/`          | Health check                             |
-| POST   | `/analyze`   | Text → tokens, hits, score, verdict      |
-| POST   | `/transcribe`| Audio file → transcript → analysis      |
-| GET    | `/dataset`   | Return collected dataset as JSON         |
-| GET    | `/export`    | Download dataset as UTF-8 CSV            |
-| POST   | `/reset`     | Clear in-memory dataset                  |
-| GET    | `/metrics`   | Precision / Recall / F1 (labelled rows)  |
+### 2. Pipeline Directory (`pipeline/`)
 
-### POST /analyze
-
-```json
-// Request
-{ "text": "โอนเงินด่วน รหัส OTP", "source": "text-input" }
-
-// Response
-{
-  "tokens": ["โอนเงิน", "ด่วน", "รหัส", "otp"],
-  "hits": { "otp": ["otp","รหัส"], "money": ["โอนเงิน"], "urgency": ["ด่วน"] },
-  "score": 85,
-  "is_scam": true,
-  "label": "scam",
-  "source": "text-input",
-  "elapsed_ms": 0.4
-}
-```
-
-### POST /transcribe
-
-Send multipart/form-data with an `audio` field (.wav or .mp3).
-
-#### Enable real Thai ASR
-
-Set `TRANSCRIBE_URL` to a running PyThaiASR HTTP service:
-
-```bash
-# 1. Run the Python ASR sidecar (pythaiasr_service.py)
-TRANSCRIBE_URL=http://localhost:5001/transcribe npm start
-```
-
-Without this env var, the endpoint returns a development stub message.
-
-## Differences from Python Version & Performance
-
-| Aspect | Python/Flask | Node.js/Express (Current) |
-|--------|-------------|-----------------|
-| Runtime | Python 3.10+ | Node.js 18+ |
-| Framework | Flask + flask-cors | Express + cors |
-| File upload | Flask request.files | multer (memory storage) |
-| Thai tokeniser | PyThaiNLP (newmm) | Window-based fallback |
-| Cold Start | 3-8s | ~200ms |
-| /analyze Latency | ~2–5ms | ~0.5–1ms |
-| Memory (Idle) | ~180MB | ~35MB |
-
-**Why Node.js?**
-- The frontend (`thai_scam_detector.html`) is already JavaScript — same language end-to-end.
-- Performance: Worker pools and LRU caching drastically reduced server resources and latency.
-- No heavy Python ML dependencies needed for the core keyword-matching pipeline.
+*   **`transcriber.js`**: Converts audio to text using Google's Web Speech API (Native JS).
+*   **`preprocessor.js`**: Normalizes Thai text and segments it using a sliding window.
+*   **`extractor.js`**: Scans tokens for scam patterns (OTP, money, urgency, etc.) and calculates a risk score.
+*   **`classifier.js`**: Maps the risk score to final verdicts (scam, warning, normal).
+*   **`toneAnalyzer.js`**: Performs DSP on raw audio to detect vocal stress signals.
+*   **`combinedScorer.js`**: Fuses text and tone scores into a final probability (60% text / 40% tone).
+*   **`worker_manager.js`**: Manages a pool of Worker Threads for parallel execution.
+*   **`worker.js`**: The script executed by background threads for CPU-intensive tasks.
 
 ## Performance Benchmarking (Node.js vs Python)
 
@@ -125,6 +74,23 @@ For 50 iterations of the Pitch Estimation algorithm (16,000 samples):
 - **JavaScript (Node.js):** ~5.8 ms/avg
 - **Python 3:** ~188.5 ms/avg
 - **Verdict:** **Node.js is ~32x faster** for the core math operations used in this pipeline.
+
+### Benchmark Files
+*   **`test_optimize.js`**: Standalone JS benchmark for `estimatePitch`.
+*   **`test_optimize.py`**: Standalone Python benchmark for `estimatePitch`.
+*   **`run_benchmarks.js`**: Orchestrator to run both tests and compare results.
+
+## API Endpoints
+
+| Method | Path         | Description                              |
+|--------|--------------|------------------------------------------|
+| GET    | `/`          | Health check                             |
+| POST   | `/analyze`   | Text → tokens, hits, score, verdict      |
+| POST   | `/transcribe`| Audio file → transcript → analysis      |
+| GET    | `/dataset`   | Return collected dataset as JSON         |
+| GET    | `/export`    | Download dataset as UTF-8 CSV            |
+| POST   | `/reset`     | Clear in-memory dataset                  |
+| GET    | `/metrics`   | Precision / Recall / F1 (labelled rows)  |
 
 ## Development Team (ITCS225)
 
