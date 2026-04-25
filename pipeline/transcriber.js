@@ -1,114 +1,92 @@
 /**
- * pipeline/transcriber.js — Step 2: Speech-to-Text
+ * pipeline/transcriber.js — Step 2: Speech-to-Text (Native JS Version)
  * ==================================================
- * Handles audio transcription. In production, integrate a Thai ASR service
- * such as PyThaiASR (via a local Python micro-service), Google Speech-to-Text,
- * or Azure Cognitive Services.
- *
- * This module provides:
- *   - A stub that returns a helpful message when no ASR is configured
- *   - A hook (TRANSCRIBE_URL env var) to forward audio to an external
- *     PyThaiASR HTTP service
- *
- * To run PyThaiASR as a sidecar service:
- *   pip install pythaiasr flask
- *   python pythaiasr_service.py   # listens on :5001
- *   TRANSCRIBE_URL=http://localhost:5001/transcribe node server.js
+ * Handles audio transcription internally using Google's free Web Speech API
+ * (matching the Python SpeechRecognition library), eliminating the Python dependency.
  */
 
 "use strict";
 
-const TRANSCRIBE_URL = process.env.TRANSCRIBE_URL || "http://localhost:5001/transcribe";
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { exec } = require("child_process");
+const util = require("util");
+const execPromise = util.promisify(exec);
+
+// Use the local FFmpeg binary installed via npm
+const ffmpegPath = require("@ffmpeg-installer/ffmpeg").path;
 
 /**
- * Transcribe raw audio bytes to Thai text.
+ * Transcribe raw audio bytes to Thai text natively.
  *
  * @param {Buffer} audioBuffer  - Raw binary audio content
- * @param {string} suffix       - File extension: ".wav" | ".mp3"
+ * @param {string} suffix       - File extension: ".wav" | ".mp3" | ".m4a"
  * @returns {Promise<string>}   - Transcribed Thai text
  */
 async function transcribeAudio(audioBuffer, suffix) {
-  // ── Option A: Forward to external PyThaiASR service ──────────────────────
-  if (TRANSCRIBE_URL) {
-    return forwardToAsrService(audioBuffer, suffix);
-  }
+  const tempId = Date.now() + "_" + Math.floor(Math.random() * 10000);
+  const inputPath = path.join(os.tmpdir(), `input_${tempId}${suffix || ".wav"}`);
+  const flacPath = path.join(os.tmpdir(), `output_${tempId}.flac`);
 
-  // ── Option B: Development stub ───────────────────────────────────────────
-  console.warn(
-    "[transcriber] No TRANSCRIBE_URL configured. " +
-    "Set TRANSCRIBE_URL=http://localhost:5001/transcribe to enable real ASR."
-  );
-  return (
-    "[ASR not configured] " +
-    "กรุณาตั้งค่า TRANSCRIBE_URL หรือติดตั้ง PyThaiASR แล้วลองใหม่"
-  );
-}
+  try {
+    // 1. Save buffer to temporary file
+    fs.writeFileSync(inputPath, audioBuffer);
 
-/**
- * Forward audio to an external ASR HTTP service.
- * The service should accept multipart/form-data with an 'audio' field
- * and return JSON: { transcript: "..." }
- *
- * @param {Buffer} audioBuffer
- * @param {string} suffix
- * @returns {Promise<string>}
- */
-async function forwardToAsrService(audioBuffer, suffix) {
-  const http = require("http");
-  const https = require("https");
-  const { URL } = require("url");
+    // 2. Convert to 16kHz Mono FLAC (Required by Google Web Speech API)
+    // ffmpeg -i <input> -y -ar 16000 -ac 1 -c:a flac <output>
+    const cmd = `"${ffmpegPath}" -i "${inputPath}" -y -ar 16000 -ac 1 -c:a flac "${flacPath}"`;
+    await execPromise(cmd);
 
-  const mimeType = suffix === ".mp3" ? "audio/mpeg"
-                 : suffix === ".m4a" ? "audio/mp4"
-                 : suffix === ".ogg" ? "audio/ogg"
-                 : "audio/wav";
+    // 3. Read the converted FLAC file
+    const flacBuffer = fs.readFileSync(flacPath);
 
-  // Build multipart/form-data manually using raw Buffers
-  // This avoids needing FormData/Blob which are unavailable in some Node builds
-  const boundary = "----NodeASRBoundary" + Date.now().toString(16);
-  const header = Buffer.from(
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="audio"; filename="upload${suffix}"\r\n` +
-    `Content-Type: ${mimeType}\r\n\r\n`
-  );
-  const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
-  const body = Buffer.concat([header, audioBuffer, footer]);
-
-  const url = new URL(TRANSCRIBE_URL);
-  const transport = url.protocol === "https:" ? https : http;
-
-  return new Promise((resolve, reject) => {
-    const req = transport.request(
-      {
-        hostname: url.hostname,
-        port:     url.port,
-        path:     url.pathname,
-        method:   "POST",
-        headers: {
-          "Content-Type":   `multipart/form-data; boundary=${boundary}`,
-          "Content-Length":  body.length,
-        },
+    // 4. Send to Google Web Speech API (free Chromium endpoint)
+    const key = "AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw";
+    const googleUrl = "https://www.google.com/speech-api/v2/recognize?client=chromium&lang=th-TH&key=" + key;
+    const response = await fetch(googleUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "audio/x-flac; rate=16000",
       },
-      (res) => {
-        const chunks = [];
-        res.on("data", (c) => chunks.push(c));
-        res.on("end", () => {
-          try {
-            const json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-            if (!json.transcript) {
-              return reject(new Error("ASR service response missing 'transcript' field"));
-            }
-            resolve(json.transcript.trim());
-          } catch (e) {
-            reject(new Error("Failed to parse ASR response: " + e.message));
+      body: flacBuffer,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Google API returned ${response.status}: ${response.statusText}`);
+    }
+
+    const responseText = await response.text();
+
+    // 5. Parse the weird multi-line JSON response that Google returns
+    // Expected format:
+    // {"result":[]}
+    // {"result":[{"alternative":[{"transcript":"ข้อความ"}],"final":true}],"result_index":0}
+    const lines = responseText.trim().split("\n");
+    for (const line of lines) {
+      if (!line) continue;
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.result && parsed.result.length > 0) {
+          const alternatives = parsed.result[0].alternative;
+          if (alternatives && alternatives.length > 0) {
+            return alternatives[0].transcript.trim();
           }
-        });
+        }
+      } catch (e) {
+        // ignore JSON parse errors on partial lines
       }
-    );
-    req.on("error", (e) => reject(new Error("ASR service connection failed: " + e.message)));
-    req.write(body);
-    req.end();
-  });
+    }
+
+    return "[เสียงไม่ชัดเจน หรือไม่มีเสียงพูดระดับที่ตรวจจับได้]";
+  } catch (error) {
+    console.error("[transcriber] STT Error:", error);
+    throw new Error("เกิดข้อผิดพลาดในการประมวลผลเสียง: " + error.message);
+  } finally {
+    // Cleanup Temp Files
+    if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+    if (fs.existsSync(flacPath)) fs.unlinkSync(flacPath);
+  }
 }
 
 module.exports = { transcribeAudio };

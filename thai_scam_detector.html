@@ -91,6 +91,7 @@
   .token.hit-money{background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.35);color:var(--amber);font-weight:500;}
   .token.hit-urgency{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.2);color:#f87171;font-weight:500;}
   .token.hit-authority{background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.25);color:#fbbf24;font-weight:500;}
+  .token.hit-bait{background:rgba(16,185,129,0.15);border-color:rgba(16,185,129,0.35);color:#059669;font-weight:500;}
   .feature-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.82rem;}
   .feature-row:last-child{border-bottom:none;}
   .feature-name{color:var(--text-muted);}
@@ -100,6 +101,7 @@
   .ft-money{background:var(--amber-bg);color:var(--amber);}
   .ft-urgency{background:rgba(239,68,68,0.08);color:#f87171;}
   .ft-authority{background:rgba(245,158,11,0.08);color:#fbbf24;}
+  .ft-bait{background:rgba(16,185,129,0.08);color:#059669;border:1px solid rgba(16,185,129,0.35);}
   .ft-none{color:var(--text-dim);font-size:0.72rem;}
   .score-bar-wrap{margin:1.25rem 0 0.75rem;}
   .score-labels{display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;}
@@ -152,7 +154,11 @@
 <div class="app">
 
 <div class="header">
-  <div class="header-icon"><img src="royal_thai_police_scam_shield_1775732183402.png" alt="RTP Shield"></div>
+  <div class="header-icon">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="var(--rtp-gold)" stroke="var(--rtp-maroon)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+    </svg>
+  </div>
   <div>
     <h1>ระบบตรวจจับสายโทรศัพท์หลอกลวง</h1>
     <p>ศูนย์ต่อต้านอาชญากรรมออนไลน์ (AOC) — สำนักงานตำรวจแห่งชาติ</p>
@@ -176,8 +182,8 @@
 
 <div class="input-tabs">
   <button class="tab-btn active" onclick="switchTab('text')" id="tab-text">⌨️ Text Input</button>
-  <button class="tab-btn" onclick="switchTab('mic')" id="tab-mic">🎤 Microphone</button>
   <button class="tab-btn" onclick="switchTab('file')" id="tab-file">📁 Upload Audio</button>
+  <button class="tab-btn" onclick="switchTab('mic')" id="tab-mic">🎤 Microphone</button>
 </div>
 
 <!-- Tab 1: Text -->
@@ -207,6 +213,7 @@
           <div class="feature-row"><span class="feature-name">โอนเงิน / ธุรกรรม</span><span class="ft-none">—</span></div>
           <div class="feature-row"><span class="feature-name">ความเร่งด่วน</span><span class="ft-none">—</span></div>
           <div class="feature-row"><span class="feature-name">อ้างอำนาจ</span><span class="ft-none">—</span></div>
+          <div class="feature-row"><span class="feature-name">เหยื่อล่อ / รางวัล</span><span class="ft-none">—</span></div>
         </div>
       </div>
     </div>
@@ -293,6 +300,7 @@
     <span style="color:var(--amber);margin-left:8px">■</span> โอนเงิน (+30)
     <span style="color:#f87171;margin-left:8px">■</span> ความเร่งด่วน (+20)
     <span style="color:#fbbf24;margin-left:8px">■</span> อ้างอำนาจ (+15)
+    <span style="color:#059669;margin-left:8px">■</span> รางวัล/ฟรี (+30)
     <span style="float:right;font-family:var(--mono)">≥ 60 SCAM | &gt; 35 WARNING</span>
   </div>
 </div>
@@ -330,6 +338,7 @@ const PATTERNS_UI = {
   money:     { label: 'โอนเงิน / ธุรกรรม',  cls: 'ft-money',     tkCls: 'hit-money'     },
   urgency:   { label: 'ความเร่งด่วน',        cls: 'ft-urgency',   tkCls: 'hit-urgency'   },
   authority: { label: 'อ้างอำนาจ',           cls: 'ft-authority', tkCls: 'hit-authority' },
+  bait:      { label: 'เหยื่อล่อ / รางวัล',   cls: 'ft-bait',      tkCls: 'hit-bait'      },
 };
 
 const EXAMPLES = [
@@ -343,6 +352,8 @@ const EXAMPLES = [
 
 let dataset = [], cnt = 0, stats = { a: 0, s: 0, w: 0, ok: 0 };
 let recognition = null, isRec = false;
+let micTimeout = null;
+let fullTranscript = '';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getApiUrl() {
@@ -417,12 +428,14 @@ function initMic() {
   recognition = new SR();
   recognition.lang = 'th-TH';
   recognition.interimResults = true;
-  recognition.continuous = false;
+  recognition.continuous = true;
   recognition.onstart = () => {
     isRec = true;
+    fullTranscript = '';
+    clearTimeout(micTimeout);
     document.getElementById('mic-btn').classList.add('recording');
     document.getElementById('mic-btn').textContent = '⏹️';
-    document.getElementById('mic-status').textContent = 'กำลังฟัง...';
+    document.getElementById('mic-status').textContent = 'กำลังฟัง... รอจนกว่าคุณพูดจบ';
     document.getElementById('mic-status').classList.add('active');
     document.getElementById('mic-live').textContent = '';
   };
@@ -430,14 +443,29 @@ function initMic() {
     let final = '';
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; ++i) {
-      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
       else interim += e.results[i][0].transcript;
     }
-    document.getElementById('mic-live').innerHTML = final + '<i style="color:#adb5bd">' + interim + '</i>';
+    
     if (final) {
-      document.getElementById('mic-status').textContent = 'รับเสียงได้ — กำลังวิเคราะห์...';
-      document.getElementById('input-text').value = final;
-      setTimeout(() => runPipeline(final, 'microphone'), 400);
+      fullTranscript += final;
+    }
+    
+    const currentText = fullTranscript + interim;
+    document.getElementById('mic-live').innerHTML = fullTranscript + '<i style="color:#adb5bd">' + interim + '</i>';
+    
+    if (currentText.trim()) {
+      document.getElementById('mic-status').textContent = 'กำลังฟัง... รอจนกว่าคุณพูดจบ';
+      document.getElementById('input-text').value = currentText.trim();
+      
+      clearTimeout(micTimeout);
+      micTimeout = setTimeout(() => {
+        if (isRec) {
+          document.getElementById('mic-status').textContent = 'รับเสียงได้ — กำลังวิเคราะห์...';
+          runPipeline(currentText.trim(), 'microphone');
+          recognition.stop();
+        }
+      }, 2000);
     }
   };
   recognition.onerror = (e) => { document.getElementById('mic-status').textContent = 'Error: ' + e.error; resetMicUI(); };
@@ -587,7 +615,7 @@ function renderToksWithHits(toks, hits) {
 // We achieve this by patching renderToks after each API call in the pipeline.
 
 function renderFeats(hits) {
-  const keys = ['otp', 'money', 'urgency', 'authority'];
+  const keys = ['otp', 'money', 'urgency', 'authority', 'bait'];
   const el = document.getElementById('features'); el.innerHTML = '';
   for (const k of keys) {
     const p = PATTERNS_UI[k];

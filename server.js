@@ -417,7 +417,15 @@ function csvEscape(value) {
 // ── Entry point ───────────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT || "5000", 10);
 app.listen(PORT, "0.0.0.0", () => {
-  log.info(`Thai Scam Detector API running on http://localhost:${PORT}`);
+  const url = `http://localhost:${PORT}/thai_scam_detector.html`;
+  log.info(`Thai Scam Detector API running on ${url}`);
+  
+  // Automatically open the browser when the server starts
+  const { exec } = require('child_process');
+  const startCommand = process.platform === 'win32' ? `start "" "${url}"` : (process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`);
+  exec(startCommand).on('error', (err) => {
+    log.error(`Failed to open browser automatically: ${err.message}`);
+  });
 });
 
 module.exports = app; // for testing
