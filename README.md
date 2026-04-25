@@ -47,7 +47,6 @@ Default port: **5000** (set `PORT` env var to override).
 *   **`server.js`**: The main orchestrator. Defines the Express server, API endpoints, manages the LRU cache, and delegates heavy tasks to the Worker Pool.
 *   **`thai_scam_detector.html`**: The frontend UI. Handles user interactions, audio recording, and file uploads.
 *   **`package.json`**: Project metadata and dependencies (`express`, `multer`, `ffmpeg` wrappers, etc.).
-*   **`Thai Scam Detector High-Performance Fraud Prevention.pdf`**: Theoretical documentation on the project's logic and architecture.
 
 ### 2. Pipeline Directory (`pipeline/`)
 
